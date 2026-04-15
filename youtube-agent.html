@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>유튜브 콘텐츠 자동 생성기</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <style>
+    :root {
+      --primary: #4F46E5;
+      --primary-light: #EEF2FF;
+      --primary-dark: #3730A3;
+      --accent: #7C3AED;
+      --success: #059669;
+      --success-light: #ECFDF5;
+      --warn: #D97706;
+      --warn-light: #FFFBEB;
+      --bg: #F8FAFC;
+      --card: #FFFFFF;
+      --border: #E2E8F0;
+      --text: #1E293B;
+      --text-muted: #64748B;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', -apple-system, 'Apple SD Gothic Neo', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+      color: white;
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 4px 20px rgba(79,70,229,0.3);
+    }
+    .header-icon {
+      width: 44px; height: 44px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+    .header-title { font-size: 20px; font-weight: 700; }
+    .header-sub { font-size: 13px; opacity: 0.8; margin-top: 2px; }
+
+    /* Layout */
+    .container { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
+
+    /* Card */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 18px;
+    }
+    .card-title {
+      font-size: 15px; font-weight: 700; color: var(--text);
+      display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+    }
+    .badge {
+      width: 22px; height: 22px;
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      font-size: 11px; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+
+    /* How-to steps */
+    .steps { display: flex; flex-direction: column; gap: 10px; }
+    .step {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 14px;
+      background: var(--primary-light);
+      border-radius: 8px;
+      font-size: 13.5px; color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .step-num {
+      min-width: 22px; height: 22px;
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
+    }
+    .step strong { color: var(--text); }
+
+    /* API Key */
+    .api-row {
+      display: flex; gap: 10px; align-items: center;
+    }
+    .api-row input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color .2s;
+      background: #FAFAFA;
+    }
+    .api-row input:focus { outline: none; border-color: var(--primary); background: white; }
+    .btn-save {
+      padding: 10px 18px;
+      background: var(--primary);
+      color: white;
+      border: none; border-radius: 8px;
+      font-size: 13.5px; font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+      white-space: nowrap;
+    }
+    .btn-save:hover { background: var(--primary-dark); }
+    .api-status {
+      font-size: 12px; margin-top: 6px;
+      display: none;
+    }
+    .api-status.ok { color: var(--success); display: block; }
+    .api-status.err { color: #DC2626; display: block; }
+
+    /* Upload Zone */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      background: #FAFBFC;
+    }
+    .upload-zone:hover, .upload-zone.drag { border-color: var(--primary); background: var(--primary-light); }
+    .upload-zone.has-file { border-color: var(--success); background: var(--success-light); }
+    .upload-icon { font-size: 36px; margin-bottom: 10px; }
+    .upload-text { font-size: 14px; color: var(--text-muted); }
+    .upload-text strong { color: var(--primary); }
+    .upload-filename {
+      margin-top: 10px;
+      font-size: 13px; font-weight: 600; color: var(--success);
+    }
+    #fileInput { display: none; }
+
+    /* Textarea */
+    textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 13.5px;
+      resize: vertical;
+      min-height: 100px;
+      font-family: inherit;
+      line-height: 1.6;
+      transition: border-color .2s;
+      background: #FAFAFA;
+    }
+    textarea:focus { outline: none; border-color: var(--primary); background: white; }
+    .textarea-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+    /* Form row */
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+    .form-group label {
+      display: block; font-size: 13px; font-weight: 600; color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      transition: border-color .2s;
+      background: #FAFAFA;
+    }
+    .form-group input:focus { outline: none; border-color: var(--primary); background: white; }
+
+    /* Generate Button */
+    .btn-generate {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: white;
+      border: none; border-radius: 10px;
+      font-size: 16px; font-weight: 700;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      letter-spacing: 0.3px;
+      box-shadow: 0 4px 14px rgba(79,70,229,0.35);
+    }
+    .btn-generate:hover:not(:disabled) { opacity: 0.92; }
+    .btn-generate:active:not(:disabled) { transform: scale(0.99); }
+    .btn-generate:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    /* Spinner */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2.5px solid rgba(255,255,255,0.4);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Progress */
+    .progress-bar-wrap {
+      height: 4px;
+      background: var(--border);
+      border-radius: 4px;
+      margin-top: 12px;
+      overflow: hidden;
+      display: none;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      border-radius: 4px;
+      transition: width .4s ease;
+      width: 0%;
+    }
+    .progress-msg {
+      text-align: center;
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      display: none;
+    }
+
+    /* Results */
+    #results { display: none; }
+    .result-section { margin-bottom: 18px; }
+    .result-label {
+      font-size: 12.5px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .result-box {
+      position: relative;
+      background: #F8FAFC;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 46px 14px 14px;
+      font-size: 14px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .result-box.title-item {
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .result-box.title-item:hover { border-color: var(--primary); background: var(--primary-light); }
+    .result-box.title-item.selected {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+    .result-box.title-item .title-num {
+      font-size: 11px; font-weight: 700; color: var(--primary);
+      margin-bottom: 4px;
+    }
+
+    .btn-copy {
+      position: absolute; top: 10px; right: 10px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 9px;
+      font-size: 11.5px; font-weight: 600; color: var(--text-muted);
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .btn-copy:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-copy.copied { background: var(--success); color: white; border-color: var(--success); }
+
+    .tags-wrap { display: flex; flex-wrap: wrap; gap: 7px; }
+    .tag {
+      background: var(--primary-light);
+      color: var(--primary-dark);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 13px; font-weight: 500;
+    }
+
+    /* Alert */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      margin-top: 14px;
+      display: none;
+    }
+    .alert.error { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; display: block; }
+    .alert.warn  { background: var(--warn-light); color: var(--warn); border: 1px solid #FDE68A; display: block; }
+
+    .divider { border: none; border-top: 1px solid var(--border); margin: 4px 0 18px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">🎬</div>
+  <div>
+    <div class="header-title">유튜브 콘텐츠 자동 생성기</div>
+    <div class="header-sub">스크립트 업로드 → 제목 · 썸네일 · 설명 · 태그 자동 생성</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- CORS 경고 배너 (file:// 로 열었을 때만 표시) -->
+  <div id="corsWarning" style="display:none; background:#FFF3CD; border:1.5px solid #FFC107; border-radius:12px; padding:18px 20px; margin-bottom:18px;">
+    <div style="font-weight:700; font-size:15px; color:#856404; margin-bottom:10px;">⚠️ 브라우저 보안 정책으로 API 호출이 차단됩니다</div>
+    <div style="font-size:13.5px; color:#664D03; line-height:1.7;">
+      이 파일을 <code style="background:#FFF;padding:1px 5px;border-radius:4px;">file://</code>로 직접 열면 브라우저가 외부 API를 차단합니다.<br/>
+      아래 방법 중 하나로 실행해 주세요:
+    </div>
+    <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
+      <div style="background:white; border-radius:8px; padding:12px 14px; font-size:13px; color:#333;">
+        <strong>방법 1 — Python (추천)</strong><br/>
+        <code style="display:block; margin-top:6px; background:#1E293B; color:#7DD3FC; padding:8px 12px; border-radius:6px; font-size:12.5px;">cd 파일이_있는_폴더<br/>python -m http.server 8080</code>
+        <span style="font-size:12px; color:#666;">→ 브라우저에서 <strong>http://localhost:8080/youtube-agent.html</strong> 접속</span>
+      </div>
+      <div style="background:white; border-radius:8px; padding:12px 14px; font-size:13px; color:#333;">
+        <strong>방법 2 — VS Code Live Server</strong><br/>
+        <span style="font-size:12.5px; color:#555; margin-top:4px; display:block;">VS Code에서 파일 열기 → 우클릭 → <em>Open with Live Server</em></span>
+      </div>
+      <div style="background:white; border-radius:8px; padding:12px 14px; font-size:13px; color:#333;">
+        <strong>방법 3 — Node.js</strong><br/>
+        <code style="display:block; margin-top:6px; background:#1E293B; color:#7DD3FC; padding:8px 12px; border-radius:6px; font-size:12.5px;">npx serve .</code>
+        <span style="font-size:12px; color:#666;">→ 표시된 URL로 접속 후 youtube-agent.html 클릭</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 사용 방법 -->
+  <div class="card">
+    <div class="card-title">📋 사용 방법</div>
+    <div class="steps">
+      <div class="step">
+        <span class="step-num">1</span>
+        <span><strong>Gemini API Key</strong>를 입력하고 저장하세요. (<a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--primary)">aistudio.google.com</a>에서 무료 발급)</span>
+      </div>
+      <div class="step">
+        <span class="step-num">2</span>
+        <span><strong>편집 스크립트 (.docx)</strong> 파일을 업로드하세요.</span>
+      </div>
+      <div class="step">
+        <span class="step-num">3</span>
+        <span>(선택) <strong>이전 유튜브 참고 예시</strong>를 붙여넣으면 같은 스타일로 생성됩니다.</span>
+      </div>
+      <div class="step">
+        <span class="step-num">4</span>
+        <span><strong>병원명 · 원장님 이름</strong>을 입력하고 <strong>생성 버튼</strong>을 누르세요.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- API Key -->
+  <div class="card">
+    <div class="card-title"><span class="badge">🔑</span> Gemini API Key</div>
+    <div class="api-row">
+      <input type="password" id="apiKey" placeholder="AIzaSy..." autocomplete="off" />
+      <button class="btn-save" onclick="saveKey()">키 저장</button>
+    </div>
+    <div class="api-status" id="apiStatus"></div>
+  </div>
+
+  <!-- 파일 업로드 -->
+  <div class="card">
+    <div class="card-title"><span class="badge">📄</span> 편집 스크립트 업로드</div>
+    <div class="upload-zone" id="uploadZone"
+      ondragover="handleDragOver(event)"
+      ondragleave="handleDragLeave(event)"
+      ondrop="handleDrop(event)"
+      onclick="document.getElementById('fileInput').click()">
+      <div class="upload-icon">📁</div>
+      <div class="upload-text">
+        <strong>클릭하거나 파일을 끌어다 놓으세요</strong><br/>
+        .docx 파일만 지원됩니다
+      </div>
+      <div class="upload-filename" id="uploadFilename"></div>
+    </div>
+    <input type="file" id="fileInput" accept=".docx" onchange="handleFileSelect(event)" />
+  </div>
+
+  <!-- 참고 예시 -->
+  <div class="card">
+    <div class="card-title"><span class="badge">📌</span> 이전 유튜브 참고 예시 <span style="font-size:12px;font-weight:400;color:var(--text-muted)">(선택)</span></div>
+    <textarea id="referenceText" placeholder="이전에 잘 작동한 유튜브 제목/설명/태그 예시를 여기에 붙여넣으세요.
+예시:
+[제목] 회전근개 파열 수술 후 재활, 이렇게 하세요! | 박진영병원 임관수 원장
+[설명] 안녕하세요 박진영병원입니다. 이번 영상에서는...
+[태그] 회전근개, 재활, 어깨수술, 박진영병원"></textarea>
+    <div class="textarea-hint">※ 형식 참고용입니다. 붙여넣지 않아도 생성됩니다.</div>
+  </div>
+
+  <!-- 병원 정보 -->
+  <div class="card">
+    <div class="card-title"><span class="badge">🏥</span> 영상 정보 입력</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>병원명 *</label>
+        <input type="text" id="hospitalName" placeholder="예: 박진영병원" />
+      </div>
+      <div class="form-group">
+        <label>담당 원장님 이름 *</label>
+        <input type="text" id="doctorName" placeholder="예: 임관수 원장" />
+      </div>
+    </div>
+    <div style="margin-top:14px;">
+      <div class="form-group">
+        <label>추가 강조 내용 (선택)</label>
+        <input type="text" id="extraContext" placeholder="예: 비수술 치료 전문, 정형외과 전문의, 개원 15년" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 생성 버튼 -->
+  <button class="btn-generate" id="generateBtn" onclick="generate()">
+    <div class="spinner" id="spinner"></div>
+    <span id="generateBtnText">✨ 콘텐츠 자동 생성</span>
+  </button>
+  <div class="progress-bar-wrap" id="progressWrap">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+  <div class="progress-msg" id="progressMsg"></div>
+  <div class="alert" id="alertBox"></div>
+
+  <!-- 결과 -->
+  <div id="results">
+    <div style="margin: 28px 0 18px; display:flex; align-items:center; gap:10px;">
+      <span style="font-size:18px;">🎉</span>
+      <span style="font-size:17px; font-weight:700;">생성 완료!</span>
+    </div>
+
+    <div class="card">
+      <!-- 제목 -->
+      <div class="result-section">
+        <div class="result-label">📌 유튜브 제목 (클릭하면 선택)</div>
+        <div id="titlesContainer"></div>
+      </div>
+      <hr class="divider"/>
+
+      <!-- 썸네일 -->
+      <div class="result-section">
+        <div class="result-label">🖼️ 썸네일 제목</div>
+        <div class="result-box" id="thumbnailBox">
+          <button class="btn-copy" onclick="copyBox('thumbnailBox', this)">복사</button>
+          <span id="thumbnailText"></span>
+        </div>
+      </div>
+      <hr class="divider"/>
+
+      <!-- 설명 -->
+      <div class="result-section">
+        <div class="result-label">📝 유튜브 설명</div>
+        <div class="result-box" id="descriptionBox">
+          <button class="btn-copy" onclick="copyBox('descriptionBox', this)">복사</button>
+          <span id="descriptionText"></span>
+        </div>
+      </div>
+      <hr class="divider"/>
+
+      <!-- 태그 -->
+      <div class="result-section">
+        <div class="result-label">🏷️ 태그</div>
+        <div class="result-box" id="tagsBox">
+          <button class="btn-copy" onclick="copyBox('tagsBox', this)">복사</button>
+          <div class="tags-wrap" id="tagsWrap"></div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-generate" style="background: linear-gradient(135deg,#059669,#0D9488); box-shadow:0 4px 14px rgba(5,150,105,0.3)" onclick="generate()">
+      <span>🔄 다시 생성하기</span>
+    </button>
+  </div>
+
+</div>
+
+<script>
+  let extractedText = '';
+  let savedApiKey = '';
+
+  // ─── API Key ────────────────────────────────────────
+  window.onload = () => {
+    // file:// 프로토콜 감지 → CORS 경고 표시
+    if (location.protocol === 'file:') {
+      document.getElementById('corsWarning').style.display = 'block';
+      document.getElementById('generateBtn').disabled = true;
+      document.getElementById('generateBtnText').textContent = '⚠️ 로컬 서버로 실행해야 사용 가능합니다';
+    }
+    const saved = localStorage.getItem('gemini_api_key');
+    if (saved) {
+      document.getElementById('apiKey').value = saved;
+      savedApiKey = saved;
+      showApiStatus('저장된 키가 로드되었습니다.', 'ok');
+    }
+  };
+
+  function saveKey() {
+    const key = document.getElementById('apiKey').value.trim();
+    if (!key.startsWith('AIza')) {
+      showApiStatus('올바른 Gemini API Key 형식이 아닙니다. (AIzaSy...)', 'err');
+      return;
+    }
+    localStorage.setItem('gemini_api_key', key);
+    savedApiKey = key;
+    showApiStatus('✓ API Key가 저장되었습니다.', 'ok');
+  }
+
+  function showApiStatus(msg, type) {
+    const el = document.getElementById('apiStatus');
+    el.textContent = msg;
+    el.className = 'api-status ' + type;
+  }
+
+  // ─── File Upload ─────────────────────────────────────
+  function handleDragOver(e) {
+    e.preventDefault();
+    document.getElementById('uploadZone').classList.add('drag');
+  }
+  function handleDragLeave(e) {
+    document.getElementById('uploadZone').classList.remove('drag');
+  }
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('uploadZone').classList.remove('drag');
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  }
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) processFile(file);
+  }
+
+  function processFile(file) {
+    if (!file.name.endsWith('.docx')) {
+      showAlert('.docx 파일만 업로드 가능합니다.', 'error');
+      return;
+    }
+    const zone = document.getElementById('uploadZone');
+    zone.classList.add('has-file');
+    document.getElementById('uploadFilename').textContent = '✓ ' + file.name;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      mammoth.extractRawText({ arrayBuffer: e.target.result })
+        .then(result => {
+          extractedText = result.value;
+        })
+        .catch(err => {
+          showAlert('파일 읽기 오류: ' + err.message, 'error');
+        });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // ─── Generate ────────────────────────────────────────
+  async function generate() {
+    hideAlert();
+
+    const apiKey = document.getElementById('apiKey').value.trim() || savedApiKey;
+    const hospital = document.getElementById('hospitalName').value.trim();
+    const doctor = document.getElementById('doctorName').value.trim();
+    const reference = document.getElementById('referenceText').value.trim();
+    const extra = document.getElementById('extraContext').value.trim();
+
+    // file:// 프로토콜 재확인
+    if (location.protocol === 'file:') {
+      document.getElementById('corsWarning').style.display = 'block';
+      document.getElementById('corsWarning').scrollIntoView({ behavior: 'smooth' });
+      showAlert('⚠️ 파일을 직접 열면 API 호출이 차단됩니다. 위의 안내대로 로컬 서버(python -m http.server 8080)로 실행 후 http://localhost:8080/youtube-agent.html 로 접속해 주세요.', 'error');
+      return;
+    }
+    if (!apiKey) { showAlert('Gemini API Key를 입력해 주세요.', 'error'); return; }
+    if (!extractedText) { showAlert('스크립트 .docx 파일을 먼저 업로드해 주세요.', 'error'); return; }
+    if (!hospital) { showAlert('병원명을 입력해 주세요.', 'error'); return; }
+    if (!doctor) { showAlert('원장님 이름을 입력해 주세요.', 'error'); return; }
+
+    setLoading(true);
+    setProgress(10, '스크립트 분석 중...');
+    document.getElementById('results').style.display = 'none';
+
+    const referenceSection = reference
+      ? `\n\n【참고 예시 (아래 형식·어투를 참고하여 작성하세요)】\n${reference}`
+      : '';
+
+    const prompt = `당신은 병원 유튜브 채널 전문 마케터입니다. 아래 편집 스크립트를 분석하여 유튜브 콘텐츠 메타데이터를 생성해주세요.
+
+【병원 정보】
+- 병원명: ${hospital}
+- 원장님: ${doctor}${extra ? '\n- 강조 사항: ' + extra : ''}
+${referenceSection}
+
+【편집 스크립트】
+${extractedText.slice(0, 6000)}
+
+---
+다음 형식으로 정확히 출력해주세요. 각 섹션은 반드시 아래 태그로 구분합니다:
+
+[TITLES_START]
+제목1: (제목 내용)
+제목2: (제목 내용)
+제목3: (제목 내용)
+[TITLES_END]
+
+[THUMBNAIL_START]
+(썸네일에 들어갈 짧고 강렬한 문구, 15자 이내)
+[THUMBNAIL_END]
+
+[DESCRIPTION_START]
+(유튜브 설명 전문 - 병원 소개, 영상 핵심 내용 요약, 타임라인(있으면), 병원 정보, 구독/좋아요 유도 포함)
+[DESCRIPTION_END]
+
+[TAGS_START]
+(태그를 쉼표로 구분, 20~30개)
+[TAGS_END]
+
+【작성 가이드】
+- 제목: 클릭을 유도하는 궁금증/해결책 형태, 검색에 잘 걸리는 키워드 포함, 50자 이내
+- 썸네일: 임팩트 있는 짧은 문구 (물음표나 느낌표 활용)
+- 설명: 자연스러운 한국어, SEO 최적화, 500~800자
+- 태그: 구체적인 병명, 치료법, 지역명 포함`;
+
+    try {
+      setProgress(40, 'AI가 콘텐츠를 생성하고 있습니다...');
+
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+      const response = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 2048, temperature: 0.7 }
+        })
+      });
+
+      setProgress(80, '결과 처리 중...');
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error?.message || `API 오류 (${response.status})`);
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error('Gemini 응답이 비어 있습니다. API Key를 확인해 주세요.');
+
+      setProgress(100, '완료!');
+      parseAndRender(text);
+
+    } catch (err) {
+      let msg = err.message;
+      if (msg === 'Failed to fetch' || msg.includes('fetch')) {
+        msg = '❌ API 호출 실패 (Failed to fetch)\n\n원인: 브라우저 보안 정책(CORS)\n\n해결: 터미널에서 아래 명령어 실행 후\n  python -m http.server 8080\n브라우저에서 http://localhost:8080/youtube-agent.html 접속';
+      }
+      showAlert(msg, 'error');
+      setLoading(false);
+      hideProgress();
+    }
+  }
+
+  // ─── Parse & Render ────────────────────────────────
+  function parseAndRender(text) {
+    const get = (tag, content) => {
+      const re = new RegExp(`\\[${tag}_START\\]([\\s\\S]*?)\\[${tag}_END\\]`);
+      const m = content.match(re);
+      return m ? m[1].trim() : '';
+    };
+
+    const titlesRaw = get('TITLES', text);
+    const thumbnail = get('THUMBNAIL', text);
+    const description = get('DESCRIPTION', text);
+    const tagsRaw = get('TAGS', text);
+
+    // Titles
+    const titlesContainer = document.getElementById('titlesContainer');
+    titlesContainer.innerHTML = '';
+    const titleLines = titlesRaw.split('\n').filter(l => l.trim());
+    titleLines.forEach((line, i) => {
+      const cleaned = line.replace(/^제목\d+:\s*/, '').trim();
+      if (!cleaned) return;
+      const div = document.createElement('div');
+      div.className = 'result-box title-item';
+      div.innerHTML = `<div class="title-num">제목 ${i + 1}</div>${cleaned}<button class="btn-copy" onclick="event.stopPropagation();copyText('${escapeAttr(cleaned)}', this)">복사</button>`;
+      div.onclick = () => {
+        document.querySelectorAll('.title-item').forEach(el => el.classList.remove('selected'));
+        div.classList.add('selected');
+      };
+      titlesContainer.appendChild(div);
+    });
+
+    // Thumbnail
+    document.getElementById('thumbnailText').textContent = thumbnail;
+
+    // Description
+    document.getElementById('descriptionText').textContent = description;
+
+    // Tags
+    const tagsWrap = document.getElementById('tagsWrap');
+    tagsWrap.innerHTML = '';
+    // Also store raw for copy
+    document.getElementById('tagsBox').dataset.rawTags = tagsRaw;
+    const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+    tags.forEach(tag => {
+      const span = document.createElement('span');
+      span.className = 'tag';
+      span.textContent = tag;
+      tagsWrap.appendChild(span);
+    });
+
+    setLoading(false);
+    hideProgress();
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ─── Helpers ─────────────────────────────────────────
+  function setLoading(on) {
+    const btn = document.getElementById('generateBtn');
+    const spinner = document.getElementById('spinner');
+    const btnText = document.getElementById('generateBtnText');
+    btn.disabled = on;
+    spinner.style.display = on ? 'block' : 'none';
+    btnText.textContent = on ? '생성 중...' : '✨ 콘텐츠 자동 생성';
+  }
+
+  function setProgress(pct, msg) {
+    document.getElementById('progressWrap').style.display = 'block';
+    document.getElementById('progressMsg').style.display = 'block';
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressMsg').textContent = msg;
+  }
+  function hideProgress() {
+    setTimeout(() => {
+      document.getElementById('progressWrap').style.display = 'none';
+      document.getElementById('progressMsg').style.display = 'none';
+    }, 600);
+  }
+
+  function showAlert(msg, type) {
+    const el = document.getElementById('alertBox');
+    el.textContent = msg;
+    el.className = 'alert ' + type;
+  }
+  function hideAlert() {
+    document.getElementById('alertBox').className = 'alert';
+  }
+
+  function escapeAttr(str) {
+    return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  }
+
+  function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = '✓ 복사됨';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = '복사';
+        btn.classList.remove('copied');
+      }, 1800);
+    });
+  }
+
+  function copyBox(boxId, btn) {
+    const box = document.getElementById(boxId);
+    // For tags box, use raw tag string
+    let text;
+    if (boxId === 'tagsBox') {
+      text = box.dataset.rawTags || '';
+    } else {
+      const span = box.querySelector('span');
+      text = span ? span.textContent : box.innerText;
+    }
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = '✓ 복사됨';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = '복사';
+        btn.classList.remove('copied');
+      }, 1800);
+    });
+  }
+</script>
+</body>
+</html>
