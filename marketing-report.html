@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>월간 마케팅 보고서 분석기</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+  .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+  .glass { backdrop-filter: blur(12px); background: rgba(255,255,255,0.95); }
+  .channel-card { transition: all 0.2s ease; }
+  .channel-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+  .keyword-chip { transition: all 0.15s ease; }
+  .keyword-chip:hover { transform: scale(1.05); }
+  .loading-dot { animation: bounce 1.4s infinite ease-in-out both; }
+  .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+  .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+  @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+  .drop-zone { transition: all 0.2s ease; }
+  .drop-zone.drag-over { background-color: #ede9fe; border-color: #7c3aed; transform: scale(1.01); }
+  details summary::-webkit-details-marker { display: none; }
+  details summary { list-style: none; cursor: pointer; }
+  .slide-up { animation: slideUp 0.4s ease-out forwards; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  pre.json-preview { max-height: 300px; overflow: auto; font-size: 11px; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<!-- HEADER -->
+<header class="gradient-bg text-white">
+  <div class="max-w-6xl mx-auto px-6 py-10">
+    <div class="flex items-start justify-between">
+      <div>
+        <div class="text-sm opacity-80 mb-1">Marketing Report Analyzer</div>
+        <h1 class="text-3xl md:text-4xl font-bold">월간 마케팅 보고서 분석기</h1>
+        <p class="mt-2 opacity-90">PPTX/PDF 보고서를 업로드하면 채널별 성과·다음달 키워드·콘텐츠 방향을 자동으로 도출합니다.</p>
+      </div>
+      <div class="hidden md:flex items-center space-x-2 text-sm opacity-90">
+        <span class="bg-white/20 px-3 py-1 rounded-full">PPTX</span>
+        <span class="bg-white/20 px-3 py-1 rounded-full">PDF</span>
+        <span class="bg-white/20 px-3 py-1 rounded-full">Gemini · Claude</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-6 py-8">
+
+  <!-- STEP 1: API KEY -->
+  <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+    <div class="flex items-center mb-4">
+      <div class="w-8 h-8 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-bold mr-3">1</div>
+      <h2 class="text-lg font-semibold">AI 모델 & API Key</h2>
+      <span class="ml-auto text-xs text-slate-500">로컬 브라우저에만 저장됩니다 · 외부 전송 없음</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-3 mb-3">
+      <div class="md:col-span-1">
+        <label class="block text-xs font-medium text-slate-600 mb-1">AI 제공사</label>
+        <select id="provider" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+          <option value="gemini">Gemini (Google AI)</option>
+          <option value="claude">Claude (Anthropic)</option>
+        </select>
+      </div>
+      <div class="md:col-span-1">
+        <label class="block text-xs font-medium text-slate-600 mb-1">모델</label>
+        <select id="model" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"></select>
+      </div>
+      <div class="md:col-span-1 flex items-end">
+        <a id="getKeyLink" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener"
+           class="text-xs text-violet-600 hover:text-violet-800 underline">→ API 키 발급받기</a>
+      </div>
+    </div>
+    <div class="flex gap-3">
+      <input id="apiKey" type="password" placeholder="API 키 입력"
+             class="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm">
+      <button id="saveKeyBtn" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition">저장</button>
+      <button id="clearKeyBtn" class="px-4 py-2.5 text-slate-500 hover:text-slate-700 text-sm transition">초기화</button>
+    </div>
+    <div id="keyStatus" class="mt-2 text-xs text-slate-500"></div>
+  </section>
+
+  <!-- STEP 2: FILE UPLOAD -->
+  <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+    <div class="flex items-center mb-4">
+      <div class="w-8 h-8 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-bold mr-3">2</div>
+      <h2 class="text-lg font-semibold">보고서 업로드</h2>
+      <span class="ml-auto text-xs text-slate-500">PPTX 권장 · PDF도 지원</span>
+    </div>
+
+    <div id="dropZone" class="drop-zone border-2 border-dashed border-slate-300 rounded-xl p-10 text-center cursor-pointer hover:bg-slate-50">
+      <input id="fileInput" type="file" accept=".pptx,.pdf" class="hidden">
+      <svg class="w-12 h-12 mx-auto text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+      </svg>
+      <p class="text-slate-700 font-medium">파일을 드래그하거나 클릭해서 선택하세요</p>
+      <p class="text-xs text-slate-500 mt-1">.pptx (권장) 또는 .pdf · 최대 30MB</p>
+    </div>
+
+    <div id="fileInfo" class="hidden mt-4 p-4 bg-violet-50 rounded-lg flex items-center justify-between">
+      <div class="flex items-center">
+        <svg class="w-8 h-8 text-violet-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <div>
+          <div id="fileName" class="font-medium text-slate-800"></div>
+          <div id="fileMeta" class="text-xs text-slate-500"></div>
+        </div>
+      </div>
+      <button id="removeFileBtn" class="text-slate-400 hover:text-red-500 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <details class="mt-4">
+      <summary class="text-sm text-slate-600 hover:text-violet-700">
+        <span class="inline-flex items-center">
+          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          추출된 텍스트 미리보기
+        </span>
+      </summary>
+      <pre id="extractedPreview" class="json-preview mt-2 p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 whitespace-pre-wrap"></pre>
+    </details>
+  </section>
+
+  <!-- STEP 3: ANALYZE -->
+  <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+    <div class="flex items-center mb-4">
+      <div class="w-8 h-8 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-bold mr-3">3</div>
+      <h2 class="text-lg font-semibold">분석 옵션</h2>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4 mb-5">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">병원/브랜드 명</label>
+        <input id="brandName" type="text" placeholder="예: 서울항외과"
+               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">진료/사업 영역</label>
+        <input id="industry" type="text" placeholder="예: 항외과 / 치질·치루 진료"
+               class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+      </div>
+    </div>
+    <button id="analyzeBtn" disabled
+            class="w-full py-3 gradient-bg text-white rounded-lg font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition flex items-center justify-center">
+      <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      <span id="analyzeBtnText">분석 시작</span>
+    </button>
+  </section>
+
+  <!-- LOADING -->
+  <div id="loadingSection" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-10 mb-6 text-center">
+    <div class="flex justify-center mb-4">
+      <div class="loading-dot w-3 h-3 bg-violet-600 rounded-full mx-1"></div>
+      <div class="loading-dot w-3 h-3 bg-violet-600 rounded-full mx-1"></div>
+      <div class="loading-dot w-3 h-3 bg-violet-600 rounded-full mx-1"></div>
+    </div>
+    <p id="loadingText" class="text-slate-700 font-medium">분석 중…</p>
+    <p id="loadingSubtext" class="text-xs text-slate-500 mt-1">AI가 채널별 수치를 정리하고 있습니다</p>
+  </div>
+
+  <!-- ERROR -->
+  <div id="errorSection" class="hidden bg-red-50 border border-red-200 rounded-2xl p-6 mb-6">
+    <div class="flex items-start">
+      <svg class="w-6 h-6 text-red-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      <div>
+        <h3 class="font-semibold text-red-800">오류 발생</h3>
+        <p id="errorText" class="text-sm text-red-700 mt-1"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="resultsSection" class="hidden space-y-6">
+
+    <!-- Executive Summary -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 slide-up">
+      <h2 class="text-xl font-bold mb-3 flex items-center">
+        <span class="w-1 h-6 bg-violet-600 rounded mr-3"></span>
+        Executive Summary
+      </h2>
+      <p id="execSummary" class="text-slate-700 leading-relaxed"></p>
+    </section>
+
+    <!-- Channel Performance -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 slide-up">
+      <h2 class="text-xl font-bold mb-4 flex items-center">
+        <span class="w-1 h-6 bg-violet-600 rounded mr-3"></span>
+        채널별 성과 요약
+      </h2>
+      <div id="channelGrid" class="grid md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- MoM Chart -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 slide-up">
+      <h2 class="text-xl font-bold mb-4 flex items-center">
+        <span class="w-1 h-6 bg-violet-600 rounded mr-3"></span>
+        전월 대비 추이
+      </h2>
+      <div class="grid md:grid-cols-2 gap-6">
+        <div><canvas id="momChart"></canvas></div>
+        <div><canvas id="growthChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- Recommended Keywords -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 slide-up">
+      <h2 class="text-xl font-bold mb-2 flex items-center">
+        <span class="w-1 h-6 bg-violet-600 rounded mr-3"></span>
+        다음달 추천 키워드 TOP 10
+      </h2>
+      <p class="text-sm text-slate-500 mb-4">전월 성과 + 검색 인사이트 기반으로 도출됨</p>
+      <div id="keywordList" class="space-y-2"></div>
+    </section>
+
+    <!-- Content Direction -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 slide-up">
+      <h2 class="text-xl font-bold mb-4 flex items-center">
+        <span class="w-1 h-6 bg-violet-600 rounded mr-3"></span>
+        콘텐츠 방향성 제안
+      </h2>
+      <div id="contentDirection" class="space-y-4"></div>
+    </section>
+
+    <!-- Action Items -->
+    <section class="bg-gradient-to-br from-violet-50 to-blue-50 rounded-2xl border border-violet-200 p-6 slide-up">
+      <h2 class="text-xl font-bold mb-4 flex items-center">
+        <span class="w-1 h-6 bg-violet-600 rounded mr-3"></span>
+        다음달 액션 아이템
+      </h2>
+      <div id="actionItems" class="space-y-2"></div>
+    </section>
+
+    <!-- Export -->
+    <div class="flex gap-3 justify-center">
+      <button id="downloadJsonBtn" class="px-5 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-900 transition">
+        📥 JSON 다운로드
+      </button>
+      <button id="downloadHtmlBtn" class="px-5 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition">
+        📄 보고서 HTML 저장
+      </button>
+      <button id="resetBtn" class="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition">
+        🔄 새 보고서 분석
+      </button>
+    </div>
+  </div>
+
+  <footer class="text-center text-xs text-slate-400 mt-12 pb-6">
+    Built for monthly marketing report analysis · Powered by Claude API
+  </footer>
+</main>
+
+<script>
+// ===========================================================================
+// PDF.js worker
+// ===========================================================================
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ===========================================================================
+// State
+// ===========================================================================
+let extractedText = '';
+let extractedFileName = '';
+let analysisResult = null;
+let momChartInstance = null;
+let growthChartInstance = null;
+
+// ===========================================================================
+// PROVIDER & API KEY MANAGEMENT
+// ===========================================================================
+const apiKeyInput = document.getElementById('apiKey');
+const keyStatus = document.getElementById('keyStatus');
+const providerSelect = document.getElementById('provider');
+const modelSelect = document.getElementById('model');
+const getKeyLink = document.getElementById('getKeyLink');
+
+const MODEL_CONFIG = {
+  gemini: {
+    models: [
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (추천 · 빠름)' },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (고품질)' },
+      { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' }
+    ],
+    keyPrefix: 'AIza',
+    keyHint: '⚠ Google AI Studio API 키 (AIza... 형식) 인지 확인해주세요',
+    placeholder: 'AIza...',
+    keyLink: 'https://aistudio.google.com/apikey',
+    storeKey: 'gemini_api_key'
+  },
+  claude: {
+    models: [
+      { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5 (추천)' },
+      { id: 'claude-opus-4-5', label: 'Claude Opus 4.5 (최고품질)' },
+      { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (빠름·저렴)' }
+    ],
+    keyPrefix: 'sk-ant-',
+    keyHint: '⚠ Anthropic API 키 (sk-ant-... 형식) 인지 확인해주세요',
+    placeholder: 'sk-ant-api03-...',
+    keyLink: 'https://console.anthropic.com/settings/keys',
+    storeKey: 'claude_api_key'
+  }
+};
+
+function refreshProviderUI() {
+  const cfg = MODEL_CONFIG[providerSelect.value];
+  modelSelect.innerHTML = cfg.models.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
+  apiKeyInput.placeholder = cfg.placeholder;
+  getKeyLink.href = cfg.keyLink;
+
+  // Restore saved key for this provider
+  const saved = localStorage.getItem(cfg.storeKey);
+  apiKeyInput.value = saved || '';
+  if (saved) {
+    keyStatus.textContent = '✓ 저장된 키가 로드되었습니다';
+    keyStatus.className = 'mt-2 text-xs text-emerald-600';
+  } else {
+    keyStatus.textContent = '';
+  }
+  // Restore saved model
+  const savedModel = localStorage.getItem(cfg.storeKey + '_model');
+  if (savedModel && [...modelSelect.options].some(o => o.value === savedModel)) {
+    modelSelect.value = savedModel;
+  }
+  // Save provider preference
+  localStorage.setItem('preferred_provider', providerSelect.value);
+}
+
+// Initialize: restore preferred provider
+const savedProvider = localStorage.getItem('preferred_provider');
+if (savedProvider && MODEL_CONFIG[savedProvider]) providerSelect.value = savedProvider;
+refreshProviderUI();
+
+providerSelect.addEventListener('change', refreshProviderUI);
+modelSelect.addEventListener('change', () => {
+  const cfg = MODEL_CONFIG[providerSelect.value];
+  localStorage.setItem(cfg.storeKey + '_model', modelSelect.value);
+});
+
+document.getElementById('saveKeyBtn').addEventListener('click', () => {
+  const cfg = MODEL_CONFIG[providerSelect.value];
+  const key = apiKeyInput.value.trim();
+  if (!key.startsWith(cfg.keyPrefix)) {
+    keyStatus.textContent = cfg.keyHint;
+    keyStatus.className = 'mt-2 text-xs text-amber-600';
+    return;
+  }
+  localStorage.setItem(cfg.storeKey, key);
+  localStorage.setItem(cfg.storeKey + '_model', modelSelect.value);
+  keyStatus.textContent = '✓ 저장되었습니다';
+  keyStatus.className = 'mt-2 text-xs text-emerald-600';
+});
+
+document.getElementById('clearKeyBtn').addEventListener('click', () => {
+  const cfg = MODEL_CONFIG[providerSelect.value];
+  localStorage.removeItem(cfg.storeKey);
+  apiKeyInput.value = '';
+  keyStatus.textContent = '키가 삭제되었습니다';
+  keyStatus.className = 'mt-2 text-xs text-slate-500';
+});
+
+// ===========================================================================
+// FILE UPLOAD
+// ===========================================================================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+const fileNameEl = document.getElementById('fileName');
+const fileMetaEl = document.getElementById('fileMeta');
+const extractedPreview = document.getElementById('extractedPreview');
+const analyzeBtn = document.getElementById('analyzeBtn');
+
+dropZone.addEventListener('click', () => fileInput.click());
+['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); }));
+['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); }));
+dropZone.addEventListener('drop', ev => { if (ev.dataTransfer.files.length) handleFile(ev.dataTransfer.files[0]); });
+fileInput.addEventListener('change', ev => { if (ev.target.files.length) handleFile(ev.target.files[0]); });
+
+document.getElementById('removeFileBtn').addEventListener('click', () => {
+  extractedText = '';
+  extractedFileName = '';
+  fileInput.value = '';
+  fileInfo.classList.add('hidden');
+  extractedPreview.textContent = '';
+  analyzeBtn.disabled = true;
+});
+
+async function handleFile(file) {
+  if (file.size > 30 * 1024 * 1024) {
+    alert('파일이 너무 큽니다 (최대 30MB)');
+    return;
+  }
+
+  fileNameEl.textContent = file.name;
+  fileMetaEl.textContent = `${(file.size / 1024).toFixed(1)} KB · 추출 중…`;
+  fileInfo.classList.remove('hidden');
+  extractedFileName = file.name;
+  analyzeBtn.disabled = true;
+
+  try {
+    if (file.name.toLowerCase().endsWith('.pptx')) {
+      extractedText = await extractFromPPTX(file);
+    } else if (file.name.toLowerCase().endsWith('.pdf')) {
+      extractedText = await extractFromPDF(file);
+    } else {
+      throw new Error('지원하지 않는 파일 형식입니다. PPTX 또는 PDF만 가능합니다.');
+    }
+
+    fileMetaEl.textContent = `${(file.size / 1024).toFixed(1)} KB · 추출 완료 (${extractedText.length.toLocaleString()}자)`;
+    extractedPreview.textContent = extractedText.slice(0, 5000) + (extractedText.length > 5000 ? '\n\n... (이하 생략)' : '');
+    analyzeBtn.disabled = false;
+  } catch (err) {
+    fileMetaEl.textContent = `오류: ${err.message}`;
+    fileMetaEl.classList.add('text-red-600');
+  }
+}
+
+// ===========================================================================
+// PPTX EXTRACTION (slide-aware, with chart data)
+// ===========================================================================
+async function extractFromPPTX(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const zip = await JSZip.loadAsync(arrayBuffer);
+
+  // Find slide files in order
+  const slideFiles = Object.keys(zip.files)
+    .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+    .sort((a, b) => {
+      const ai = parseInt(a.match(/slide(\d+)\.xml/)[1]);
+      const bi = parseInt(b.match(/slide(\d+)\.xml/)[1]);
+      return ai - bi;
+    });
+
+  // Chart files
+  const chartFiles = Object.keys(zip.files).filter(name => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+
+  let result = `[보고서 파일: ${file.name}]\n총 슬라이드 수: ${slideFiles.length}\n\n`;
+
+  // Build slide -> chart relationship
+  const slideRels = {};
+  for (const slideFile of slideFiles) {
+    const slideNum = slideFile.match(/slide(\d+)\.xml/)[1];
+    const relPath = `ppt/slides/_rels/slide${slideNum}.xml.rels`;
+    if (zip.files[relPath]) {
+      const relXml = await zip.files[relPath].async('string');
+      const chartMatches = [...relXml.matchAll(/Target="\.\.\/charts\/(chart\d+)\.xml"/g)].map(m => m[1]);
+      slideRels[slideNum] = chartMatches;
+    }
+  }
+
+  // Extract each slide's text
+  for (const slideFile of slideFiles) {
+    const slideNum = slideFile.match(/slide(\d+)\.xml/)[1];
+    const xml = await zip.files[slideFile].async('string');
+
+    const texts = [];
+    const textRegex = /<a:t[^>]*>([\s\S]*?)<\/a:t>/g;
+    let m;
+    while ((m = textRegex.exec(xml)) !== null) {
+      const t = m[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim();
+      if (t) texts.push(t);
+    }
+
+    result += `=== 슬라이드 ${slideNum} ===\n`;
+    if (texts.length) result += texts.join(' | ') + '\n';
+
+    // Inline chart data for this slide
+    const charts = slideRels[slideNum] || [];
+    for (const chartId of charts) {
+      const chartPath = `ppt/charts/${chartId}.xml`;
+      if (zip.files[chartPath]) {
+        const cxml = await zip.files[chartPath].async('string');
+        const chartData = parseChartXml(cxml);
+        if (chartData) {
+          result += `[차트 데이터]\n${chartData}\n`;
+        }
+      }
+    }
+    result += '\n';
+  }
+
+  return result.trim();
+}
+
+function parseChartXml(xml) {
+  // Extract category names (c:cat -> c:pt -> c:v)
+  const catSection = xml.match(/<c:cat>[\s\S]*?<\/c:cat>/);
+  const categories = [];
+  if (catSection) {
+    const ptRegex = /<c:pt[^>]*>[\s\S]*?<c:v>([\s\S]*?)<\/c:v>[\s\S]*?<\/c:pt>/g;
+    let m;
+    while ((m = ptRegex.exec(catSection[0])) !== null) categories.push(m[1].trim());
+  }
+
+  // Extract series
+  const series = [];
+  const serRegex = /<c:ser>([\s\S]*?)<\/c:ser>/g;
+  let sm;
+  while ((sm = serRegex.exec(xml)) !== null) {
+    const block = sm[1];
+    const nameMatch = block.match(/<c:tx>[\s\S]*?<c:v>([\s\S]*?)<\/c:v>[\s\S]*?<\/c:tx>/);
+    const name = nameMatch ? nameMatch[1].trim() : 'series';
+    const valSection = block.match(/<c:val>[\s\S]*?<\/c:val>/);
+    const values = [];
+    if (valSection) {
+      const vRegex = /<c:pt[^>]*>[\s\S]*?<c:v>([\s\S]*?)<\/c:v>[\s\S]*?<\/c:pt>/g;
+      let vm;
+      while ((vm = vRegex.exec(valSection[0])) !== null) values.push(vm[1].trim());
+    }
+    series.push({ name, values });
+  }
+
+  if (!series.length) return null;
+  let out = '';
+  if (categories.length) out += `카테고리: ${categories.join(', ')}\n`;
+  for (const s of series) out += `${s.name}: ${s.values.join(', ')}\n`;
+  return out.trim();
+}
+
+// ===========================================================================
+// PDF EXTRACTION
+// ===========================================================================
+async function extractFromPDF(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let result = `[보고서 파일: ${file.name}]\n총 페이지 수: ${pdf.numPages}\n\n`;
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const text = content.items.map(item => item.str).join(' ');
+    result += `=== 페이지 ${i} ===\n${text}\n\n`;
+  }
+  return result.trim();
+}
+
+// ===========================================================================
+// AI API CALL — Gemini & Claude
+// ===========================================================================
+async function callAI(systemPrompt, userPrompt, apiKey, provider, model) {
+  if (provider === 'gemini') return callGemini(systemPrompt, userPrompt, apiKey, model);
+  if (provider === 'claude') return callClaude(systemPrompt, userPrompt, apiKey, model);
+  throw new Error('알 수 없는 AI 제공사: ' + provider);
+}
+
+async function callGemini(systemPrompt, userPrompt, apiKey, model) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 8192,
+        responseMimeType: 'application/json'
+      }
+    })
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini API 오류 (${response.status}): ${errText.slice(0, 400)}`);
+  }
+  const data = await response.json();
+  if (!data.candidates || !data.candidates[0]) {
+    throw new Error('Gemini가 빈 응답을 반환했습니다. 프롬프트를 줄이거나 모델을 변경해보세요.');
+  }
+  const cand = data.candidates[0];
+  if (cand.finishReason && cand.finishReason !== 'STOP' && cand.finishReason !== 'MAX_TOKENS') {
+    throw new Error(`Gemini 응답이 차단되었습니다: ${cand.finishReason}`);
+  }
+  return cand.content.parts.map(p => p.text || '').join('');
+}
+
+async function callClaude(systemPrompt, userPrompt, apiKey, model) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: model,
+      max_tokens: 8000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }]
+    })
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Claude API 오류 (${response.status}): ${errText.slice(0, 400)}`);
+  }
+  const data = await response.json();
+  return data.content[0].text;
+}
+
+// ===========================================================================
+// ANALYSIS
+// ===========================================================================
+analyzeBtn.addEventListener('click', runAnalysis);
+
+async function runAnalysis() {
+  const apiKey = apiKeyInput.value.trim();
+  const provider = providerSelect.value;
+  const model = modelSelect.value;
+
+  if (!apiKey) {
+    showError(`${provider === 'gemini' ? 'Gemini' : 'Claude'} API 키를 먼저 입력해주세요.`);
+    return;
+  }
+  if (!extractedText) {
+    showError('보고서 파일을 먼저 업로드해주세요.');
+    return;
+  }
+
+  hideError();
+  document.getElementById('resultsSection').classList.add('hidden');
+  document.getElementById('loadingSection').classList.remove('hidden');
+  analyzeBtn.disabled = true;
+
+  const brandName = document.getElementById('brandName').value.trim() || '(미지정)';
+  const industry = document.getElementById('industry').value.trim() || '(미지정)';
+
+  const loadingText = document.getElementById('loadingText');
+  const loadingSubtext = document.getElementById('loadingSubtext');
+
+  try {
+    loadingText.textContent = '채널별 수치를 추출하는 중…';
+    loadingSubtext.textContent = '슬라이드별 데이터 정규화';
+
+    const systemPrompt = `당신은 의료/병원 마케팅 데이터 애널리스트입니다. 매월 마케팅 보고서를 받아 채널별 성과를 정량적으로 정리하고, 다음달 키워드와 콘텐츠 방향을 제안합니다.
+
+규칙:
+- 보고서에 명시된 수치만 사용. 없는 수치는 null 또는 "데이터 없음"으로 표기.
+- 모든 출력은 한국어로 작성.
+- 반드시 유효한 JSON으로만 응답할 것. 다른 설명·마크다운·코드펜스 없이 JSON 객체만 출력.`;
+
+    const userPrompt = `다음은 ${brandName} (${industry}) 의 월간 마케팅 보고서에서 추출한 텍스트입니다.
+
+---
+${extractedText.slice(0, 30000)}
+---
+
+이 보고서를 분석해 아래 스키마의 JSON으로 응답하세요:
+
+{
+  "month": "보고서 대상 월 (예: 2026년 3월)",
+  "executive_summary": "이번달 마케팅 성과의 핵심 요약 (3-4문장, 정량 수치 포함)",
+  "channels": [
+    {
+      "name": "채널명 (홈페이지/GA/GBP/검색콘솔/키워드광고/블로그/유튜브/인스타그램/모니터링/Gemini/ChatGPT 등)",
+      "metrics": [
+        {"label": "지표명", "value": "값 (예: 41,440)", "delta_vs_prev": "전월 대비 (예: +12.3% 또는 -200건)"}
+      ],
+      "summary": "이 채널의 핵심 인사이트 1-2문장",
+      "status": "good | warning | bad"
+    }
+  ],
+  "month_over_month": {
+    "labels": ["채널명1", "채널명2", ...],
+    "this_month": [숫자, 숫자, ...],
+    "last_month": [숫자, 숫자, ...],
+    "metric_label": "비교 기준 지표명 (예: 방문수, 노출수 등)"
+  },
+  "growth_rates": {
+    "labels": ["채널명1", "채널명2", ...],
+    "values": [숫자(% 또는 절대), ...],
+    "metric_label": "성장률 기준"
+  },
+  "recommended_keywords": [
+    {"keyword": "키워드", "reason": "추천 사유 (1문장)", "priority": "high|medium|low", "related_channel": "주력 채널"}
+  ],
+  "content_direction": [
+    {
+      "channel": "블로그|유튜브|인스타그램|...",
+      "themes": ["주제1", "주제2", "주제3"],
+      "rationale": "이 방향을 잡은 근거 (보고서 수치 인용)",
+      "post_count_suggestion": "권장 게시 수"
+    }
+  ],
+  "action_items": [
+    {"priority": 1, "action": "구체적 실행 항목", "owner": "담당 영역"}
+  ]
+}
+
+추천 키워드는 정확히 10개. action_items는 5-7개. content_direction은 보고서에 등장한 주요 채널을 모두 포함.`;
+
+    loadingText.textContent = `${provider === 'gemini' ? 'Gemini' : 'Claude'}가 분석 중입니다…`;
+    loadingSubtext.textContent = `채널별 인사이트 + 키워드 도출 (약 30-60초 소요) · 모델: ${model}`;
+
+    const responseText = await callAI(systemPrompt, userPrompt, apiKey, provider, model);
+
+    loadingText.textContent = '결과 정리 중…';
+    let jsonText = responseText.trim();
+    if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+    const firstBrace = jsonText.indexOf('{');
+    const lastBrace = jsonText.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) jsonText = jsonText.slice(firstBrace, lastBrace + 1);
+
+    analysisResult = JSON.parse(jsonText);
+    renderResults(analysisResult);
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    document.getElementById('loadingSection').classList.add('hidden');
+    analyzeBtn.disabled = false;
+  }
+}
+
+function showError(msg) {
+  document.getElementById('errorText').textContent = msg;
+  document.getElementById('errorSection').classList.remove('hidden');
+}
+function hideError() { document.getElementById('errorSection').classList.add('hidden'); }
+
+// ===========================================================================
+// RENDER RESULTS
+// ===========================================================================
+function renderResults(data) {
+  document.getElementById('resultsSection').classList.remove('hidden');
+
+  // Executive summary
+  document.getElementById('execSummary').textContent = data.executive_summary || '';
+
+  // Channels
+  const channelGrid = document.getElementById('channelGrid');
+  channelGrid.innerHTML = '';
+  (data.channels || []).forEach(ch => {
+    const statusColor = ch.status === 'good' ? 'emerald' : ch.status === 'warning' ? 'amber' : ch.status === 'bad' ? 'red' : 'slate';
+    const statusLabel = ch.status === 'good' ? '양호' : ch.status === 'warning' ? '주의' : ch.status === 'bad' ? '개선필요' : '';
+    const card = document.createElement('div');
+    card.className = `channel-card border border-slate-200 rounded-xl p-5 bg-white`;
+    card.innerHTML = `
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold text-slate-800">${escapeHtml(ch.name)}</h3>
+        ${statusLabel ? `<span class="text-xs px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-700">${statusLabel}</span>` : ''}
+      </div>
+      <div class="space-y-1.5 mb-3">
+        ${(ch.metrics || []).map(m => `
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-slate-600">${escapeHtml(m.label)}</span>
+            <div class="text-right">
+              <span class="font-semibold text-slate-800">${escapeHtml(String(m.value))}</span>
+              ${m.delta_vs_prev ? `<span class="text-xs ml-2 ${deltaColor(m.delta_vs_prev)}">${escapeHtml(m.delta_vs_prev)}</span>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed border-t border-slate-100 pt-3">${escapeHtml(ch.summary || '')}</p>
+    `;
+    channelGrid.appendChild(card);
+  });
+
+  // Charts
+  renderCharts(data);
+
+  // Keywords
+  const keywordList = document.getElementById('keywordList');
+  keywordList.innerHTML = '';
+  (data.recommended_keywords || []).forEach((k, i) => {
+    const pColor = k.priority === 'high' ? 'red' : k.priority === 'medium' ? 'amber' : 'slate';
+    const pLabel = k.priority === 'high' ? '🔥 HIGH' : k.priority === 'medium' ? 'MID' : 'LOW';
+    const row = document.createElement('div');
+    row.className = 'flex items-start p-3 rounded-lg hover:bg-slate-50 border border-slate-100';
+    row.innerHTML = `
+      <div class="w-8 h-8 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-bold text-sm mr-3 flex-shrink-0">${i+1}</div>
+      <div class="flex-1">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-semibold text-slate-800">${escapeHtml(k.keyword)}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-${pColor}-100 text-${pColor}-700 font-bold">${pLabel}</span>
+          ${k.related_channel ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">${escapeHtml(k.related_channel)}</span>` : ''}
+        </div>
+        <p class="text-xs text-slate-500 mt-1">${escapeHtml(k.reason || '')}</p>
+      </div>
+    `;
+    keywordList.appendChild(row);
+  });
+
+  // Content Direction
+  const cd = document.getElemen
