@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>네이버 → 티스토리 SEO 변환기</title>
+  <style>
+    :root {
+      --primary: #03C75A;
+      --primary-dark: #02a84d;
+      --primary-light: #E8FFF1;
+      --tistory: #FF5722;
+      --tistory-light: #FFF3F0;
+      --accent: #1E88E5;
+      --success: #059669;
+      --border: #E2E8F0;
+      --bg: #F8FAFC;
+      --card: #FFFFFF;
+      --text: #1E293B;
+      --muted: #64748B;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', -apple-system, 'Apple SD Gothic Neo', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #03C75A 0%, #1E88E5 100%);
+      color: white; padding: 22px 32px;
+      display: flex; align-items: center; gap: 16px;
+      box-shadow: 0 4px 20px rgba(3,199,90,.25);
+    }
+    .header-icon { width: 48px; height: 48px; background: rgba(255,255,255,.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+    .header h1 { font-size: 20px; font-weight: 800; }
+    .header p  { font-size: 13px; opacity: .85; margin-top: 3px; }
+    .badge-wrap { margin-left: auto; display: flex; gap: 8px; }
+    .badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.2); }
+
+    /* Layout */
+    .wrap { max-width: 860px; margin: 0 auto; padding: 28px 18px 80px; }
+
+    /* Card */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; margin-bottom: 16px; }
+    .card-label { font-size: 12.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 13px; display: flex; align-items: center; gap: 8px; }
+
+    /* Inputs */
+    input[type=text], input[type=password], textarea, select {
+      width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 9px;
+      font-size: 14px; font-family: inherit; background: #FAFAFA; transition: border-color .2s; color: var(--text);
+    }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: var(--primary); background: white; }
+    textarea { resize: vertical; line-height: 1.65; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+    /* API row */
+    .row { display: flex; gap: 10px; align-items: flex-start; }
+    .api-status { font-size: 12px; margin-top: 6px; display: none; }
+    .api-status.ok  { color: var(--success); display: block; }
+    .api-status.err { color: #DC2626; display: block; }
+    .btn-sm { padding: 11px 18px; border: none; border-radius: 9px; cursor: pointer; background: var(--primary); color: white; font-size: 13.5px; font-weight: 700; white-space: nowrap; transition: background .2s; }
+    .btn-sm:hover { background: var(--primary-dark); }
+
+    /* Tabs: 입력 방법 */
+    .tab-group { display: flex; gap: 0; border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+    .tab-opt { flex: 1; padding: 11px; text-align: center; font-size: 13.5px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .15s; background: white; border: none; }
+    .tab-opt.on { background: var(--primary); color: white; }
+    .tab-opt:not(:last-child) { border-right: 1.5px solid var(--border); }
+
+    /* Upload zone */
+    .upload-zone {
+      border: 2px dashed var(--border); border-radius: 10px; padding: 32px 20px;
+      text-align: center; cursor: pointer; transition: all .2s; background: #FAFBFC;
+    }
+    .upload-zone:hover, .upload-zone.drag { border-color: var(--primary); background: var(--primary-light); }
+    .upload-zone.ok { border-color: var(--success); background: #ECFDF5; }
+    .upload-icon { font-size: 36px; margin-bottom: 10px; }
+    .upload-text { font-size: 14px; color: var(--muted); }
+    .upload-text strong { color: var(--primary); }
+    .upload-name { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--success); }
+    #fileInput { display: none; }
+
+    /* SEO options */
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 620px) { .grid3, .grid2 { grid-template-columns: 1fr; } }
+    .field label { display: block; font-size: 12.5px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+
+    /* Output tabs */
+    .out-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .out-tab {
+      padding: 8px 18px; border-radius: 20px; font-size: 13px; font-weight: 700;
+      border: 1.5px solid var(--border); background: white; color: var(--muted); cursor: pointer; transition: all .15s;
+    }
+    .out-tab:hover { border-color: var(--primary); color: var(--primary); }
+    .out-tab.on { background: var(--primary); color: white; border-color: var(--primary); }
+    .out-tab.tistory.on { background: var(--tistory); border-color: var(--tistory); }
+
+    /* Result box */
+    .res-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+    .res-box {
+      position: relative; padding: 16px 56px 16px 16px;
+      background: #F8FAFC; border: 1.5px solid var(--border); border-radius: 10px;
+      font-size: 14px; line-height: 1.75; white-space: pre-wrap; word-break: break-word;
+      margin-bottom: 16px; max-height: 420px; overflow-y: auto;
+    }
+    .res-box.html-preview { background: white; font-family: inherit; }
+    .res-box.html-preview h1 { font-size: 22px; font-weight: 800; margin-bottom: 12px; }
+    .res-box.html-preview h2 { font-size: 18px; font-weight: 700; margin: 18px 0 8px; color: var(--primary-dark); }
+    .res-box.html-preview h3 { font-size: 15px; font-weight: 700; margin: 14px 0 6px; }
+    .res-box.html-preview p  { margin-bottom: 10px; }
+    .res-box.html-preview strong { color: var(--tistory); }
+    .copy-btn {
+      position: absolute; top: 12px; right: 12px;
+      background: white; border: 1px solid var(--border); border-radius: 7px;
+      padding: 5px 11px; font-size: 11.5px; font-weight: 700; color: var(--muted); cursor: pointer; transition: all .15s; z-index: 2;
+    }
+    .copy-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .copy-btn.done { background: var(--success); color: white; border-color: var(--success); }
+
+    /* Tags */
+    .tags-wrap { display: flex; flex-wrap: wrap; gap: 7px; }
+    .tag { background: var(--primary-light); color: var(--primary-dark); border-radius: 20px; padding: 5px 13px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: border .15s; }
+    .tag:hover { border-color: var(--primary); }
+    .seo-score {
+      display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px;
+      border-radius: 10px; font-size: 14px; font-weight: 700; margin-bottom: 16px;
+    }
+    .seo-score.good { background: #ECFDF5; color: #059669; }
+    .seo-score.ok   { background: #FFFBEB; color: #D97706; }
+    .seo-score.bad  { background: #FEF2F2; color: #DC2626; }
+
+    /* Generate btn */
+    .btn-generate {
+      width: 100%; padding: 17px; border: none; border-radius: 11px; cursor: pointer;
+      background: linear-gradient(135deg, #03C75A, #1E88E5);
+      color: white; font-size: 16px; font-weight: 800; letter-spacing: .3px;
+      box-shadow: 0 4px 18px rgba(3,199,90,.35);
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: opacity .2s, transform .1s;
+    }
+    .btn-generate:hover:not(:disabled) { opacity: .92; }
+    .btn-generate:disabled { opacity: .5; cursor: not-allowed; }
+    .spinner { width: 19px; height: 19px; border: 2.5px solid rgba(255,255,255,.4); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Progress */
+    .prog-wrap { height: 5px; background: var(--border); border-radius: 5px; margin-top: 12px; overflow: hidden; display: none; }
+    .prog-bar { height: 100%; background: linear-gradient(90deg, #03C75A, #1E88E5); border-radius: 5px; transition: width .4s; width: 0; }
+    .prog-msg { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 8px; display: none; }
+
+    /* Alert */
+    .alert { padding: 13px 16px; border-radius: 9px; font-size: 13.5px; margin-top: 14px; white-space: pre-line; display: none; }
+    .alert.err { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; display: block; }
+
+    /* CORS */
+    .cors-box { background: #FFF3CD; border: 1.5px solid #FFC107; border-radius: 12px; padding: 16px 20px; margin-bottom: 18px; display: none; font-size: 13.5px; color: #664D03; }
+    .cors-code { display: block; margin: 8px 0 4px; background: #1E293B; color: #7DD3FC; padding: 9px 13px; border-radius: 7px; font-size: 12.5px; font-family: monospace; }
+
+    /* Results */
+    #results { display: none; margin-top: 28px; }
+    .res-header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    .res-header span.title { font-size: 17px; font-weight: 800; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 4px 0 16px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">✍️</div>
+  <div>
+    <h1>네이버 → 티스토리 SEO 변환기</h1>
+    <p>네이버 블로그 글을 구글 SEO 최적화 티스토리 포스팅으로 자동 변환</p>
+  </div>
+  <div class="badge-wrap">
+    <span class="badge">🟢 NAVER</span>
+    <span class="badge">→</span>
+    <span class="badge">🔴 TISTORY</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- CORS 경고 -->
+  <div class="cors-box" id="corsBox">
+    ⚠️ <strong>file://로 열면 API가 차단됩니다.</strong> 아래처럼 로컬 서버로 실행하세요:<br/>
+    <code class="cors-code">python -m http.server 8080</code>
+    → <strong>http://localhost:8080/naver-to-tistory.html</strong> 접속
+  </div>
+
+  <!-- ① Gemini API Key -->
+  <div class="card">
+    <div class="card-label">🔑 Gemini API Key</div>
+    <div class="row">
+      <input type="password" id="apiKey" placeholder="AIzaSy..." autocomplete="off" />
+      <button class="btn-sm" onclick="saveKey()">저장</button>
+    </div>
+    <div class="api-status" id="apiStatus"></div>
+    <div class="hint">발급: <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--primary)">aistudio.google.com</a> (무료) · 한 번 저장하면 다음에도 자동 로드</div>
+  </div>
+
+  <!-- ② 네이버 블로그 내용 입력 -->
+  <div class="card">
+    <div class="card-label">📝 네이버 블로그 원본 내용</div>
+    <div class="tab-group">
+      <button class="tab-opt on" id="tabText" onclick="switchInput('text')">✏️ 직접 붙여넣기</button>
+      <button class="tab-opt" id="tabFile" onclick="switchInput('file')">📁 TXT 파일 업로드</button>
+    </div>
+
+    <!-- 텍스트 입력 -->
+    <div id="inputText">
+      <textarea id="naverText" rows="10" placeholder="네이버 블로그 글을 여기에 붙여넣으세요.
+
+제목, 본문 내용을 그대로 복사해서 넣으면 됩니다.
+이미지 설명, 소제목 등도 포함해 주세요."></textarea>
+    </div>
+
+    <!-- 파일 업로드 -->
+    <div id="inputFile" style="display:none;">
+      <div class="upload-zone" id="uploadZone"
+        ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)"
+        onclick="document.getElementById('fileInput').click()">
+        <div class="upload-icon">📄</div>
+        <div class="upload-text"><strong>클릭하거나 TXT 파일을 끌어다 놓으세요</strong><br/>.txt 파일 지원</div>
+        <div class="upload-name" id="uploadName"></div>
+      </div>
+      <input type="file" id="fileInput" accept=".txt" onchange="onFileSelect(event)" />
+    </div>
+  </div>
+
+  <!-- ③ 추가 지시사항 -->
+  <div class="card">
+    <div class="card-label">💬 추가 지시사항 <span style="font-size:11px;font-weight:400;">(선택)</span></div>
+    <textarea id="instructions" rows="3" placeholder="예: 병원/의료 분야에 맞게 전문적으로 작성해줘
+예: 키워드 '비염 치료'를 자연스럽게 포함해줘
+예: 독자가 30~50대 여성이야, 친근한 어투로 써줘
+예: 글 길이를 2000자 이상으로 늘려줘"></textarea>
+  </div>
+
+  <!-- ④ SEO 설정 -->
+  <div class="card">
+    <div class="card-label">⚙️ SEO 설정</div>
+    <div class="grid3">
+      <div class="field">
+        <label>주요 타겟 키워드</label>
+        <input type="text" id="keyword" placeholder="키워드를 입력하세요" />
+      </div>
+      <div class="field">
+        <label>블로그/사이트 이름</label>
+        <input type="text" id="siteName" placeholder="블로그명을 입력해주세요" />
+      </div>
+      <div class="field">
+        <label>글 스타일</label>
+        <select id="style">
+          <option value="전문적">전문적 (병원/의료)</option>
+          <option value="친근한">친근한 (일상/라이프)</option>
+          <option value="정보성">정보성 (지식/가이드)</option>
+          <option value="리뷰형">리뷰형 (제품/서비스)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- 생성 버튼 -->
+  <button class="btn-generate" id="genBtn" onclick="generate()">
+    <div class="spinner" id="spinner"></div>
+    <span id="genText">🚀 티스토리 SEO 글 변환하기</span>
+  </button>
+  <div class="prog-wrap" id="progWrap"><div class="prog-bar" id="progBar"></div></div>
+  <div class="prog-msg" id="progMsg"></div>
+  <div class="alert" id="alertBox"></div>
+
+  <!-- 결과 -->
+  <div id="results">
+    <div class="res-header">
+      <span class="title">✅ 변환 완료!</span>
+      <button class="btn-sm" style="margin-left:auto;" onclick="generate()">🔄 다시 변환</button>
+    </div>
+
+    <!-- 출력 탭 -->
+    <div class="out-tabs">
+      <button class="out-tab on" onclick="switchOut('seo')">📊 SEO 정보</button>
+      <button class="out-tab tistory" onclick="switchOut('post')">📝 티스토리 본문</button>
+      <button class="out-tab" onclick="switchOut('html')">💻 HTML 코드</button>
+      <button class="out-tab" onclick="switchOut('tags')">🏷️ 태그 목록</button>
+    </div>
+
+    <!-- SEO 탭 -->
+    <div id="outSeo" class="card">
+      <div id="seoScore" class="seo-score good">📈 SEO 점수 분석 중...</div>
+
+      <div class="res-label">🎯 SEO 최적화 제목</div>
+      <div class="res-box" id="seoTitle">
+        <button class="copy-btn" onclick="cpBox('seoTitle',this)">복사</button>
+      </div>
+
+      <div class="res-label">📋 메타 디스크립션 (160자 이내)</div>
+      <div class="res-box" id="metaDesc">
+        <button class="copy-btn" onclick="cpBox('metaDesc',this)">복사</button>
+      </div>
+
+      <div class="res-label">🔑 추출된 SEO 키워드</div>
+      <div class="res-box" id="seoKeywords" style="padding:14px;">
+        <div class="tags-wrap" id="keywordTags"></div>
+      </div>
+
+      <div class="res-label">💡 SEO 개선 포인트</div>
+      <div class="res-box" id="seoTips"></div>
+    </div>
+
+    <!-- 본문 탭 -->
+    <div id="outPost" class="card" style="display:none;">
+      <div class="res-label">📝 티스토리 포스팅 본문 (마크다운)</div>
+      <div class="res-box html-preview" id="postContent">
+        <button class="copy-btn" onclick="cpBox('postContent',this)">복사</button>
+      </div>
+    </div>
+
+    <!-- HTML 탭 -->
+    <div id="outHtml" class="card" style="display:none;">
+      <div class="res-label">💻 HTML 코드 (티스토리 HTML 모드에 붙여넣기)</div>
+      <div class="res-box" id="htmlContent" style="font-family:monospace;font-size:12.5px;">
+        <button class="copy-btn" onclick="cpBox('htmlContent',this)">복사</button>
+      </div>
+    </div>
+
+    <!-- 태그 탭 -->
+    <div id="outTags" class="card" style="display:none;">
+      <div class="res-label">🏷️ 티스토리 태그 (클릭하면 복사)</div>
+      <div class="tags-wrap" id="tagsList"></div>
+      <div style="margin-top:12px;">
+        <button class="btn-sm" onclick="cpAllTags()" style="background:var(--tistory);">전체 태그 복사</button>
+      </div>
+    </div>
+
+  </div><!-- /results -->
+
+</div><!-- /wrap -->
+
+<script>
+  let uploadedText = '';
+  let inputMode = 'text';
+  let savedKey = '';
+  let allTagsRaw = '';
+  let currentOut = 'seo';
+
+  // ── 초기화 ────────────────────────────────────────────
+  window.onload = () => {
+    if (location.protocol === 'file:') {
+      document.getElementById('corsBox').style.display = 'block';
+      document.getElementById('genBtn').disabled = true;
+      document.getElementById('genText').textContent = '⚠️ 로컬 서버로 실행해야 합니다';
+    }
+    const k = localStorage.getItem('gemini_api_key_blog');
+    if (k) { document.getElementById('apiKey').value = k; savedKey = k; setApiSt('✓ 저장된 키 로드됨', 'ok'); }
+  };
+
+  function saveKey() {
+    const k = document.getElementById('apiKey').value.trim();
+    if (!k.startsWith('AIza')) { setApiSt('올바른 Gemini API Key 형식이 아닙니다 (AIzaSy...)', 'err'); return; }
+    localStorage.setItem('gemini_api_key_blog', k);
+    savedKey = k;
+    setApiSt('✓ API Key 저장 완료', 'ok');
+  }
+  function setApiSt(m, t) { const e = document.getElementById('apiStatus'); e.textContent = m; e.className = 'api-status ' + t; }
+
+  // ── 입력 탭 전환 ──────────────────────────────────────
+  function switchInput(mode) {
+    inputMode = mode;
+    document.getElementById('inputText').style.display = mode === 'text' ? 'block' : 'none';
+    document.getElementById('inputFile').style.display = mode === 'file' ? 'block' : 'none';
+    document.getElementById('tabText').className = 'tab-opt' + (mode === 'text' ? ' on' : '');
+    document.getElementById('tabFile').className = 'tab-opt' + (mode === 'file' ? ' on' : '');
+  }
+
+  // ── 파일 업로드 ───────────────────────────────────────
+  function onDragOver(e) { e.preventDefault(); document.getElementById('uploadZone').classList.add('drag'); }
+  function onDragLeave()  { document.getElementById('uploadZone').classList.remove('drag'); }
+  function onDrop(e)      { e.preventDefault(); document.getElementById('uploadZone').classList.remove('drag'); if (e.dataTransfer.files[0]) readTxt(e.dataTransfer.files[0]); }
+  function onFileSelect(e){ if (e.target.files[0]) readTxt(e.target.files[0]); }
+
+  function readTxt(file) {
+    if (!file.name.endsWith('.txt')) { showErr('.txt 파일만 지원합니다.'); return; }
+    document.getElementById('uploadZone').classList.add('ok');
+    document.getElementById('uploadName').textContent = '✓ ' + file.name;
+    const r = new FileReader();
+    r.onload = e => { uploadedText = e.target.result; };
+    r.readAsText(file, 'UTF-8');
+  }
+
+  // ── 출력 탭 전환 ──────────────────────────────────────
+  function switchOut(tab) {
+    currentOut = tab;
+    ['seo','post','html','tags'].forEach(t => {
+      const el = document.getElementById('out' + t.charAt(0).toUpperCase() + t.slice(1));
+      if (el) el.style.display = t === tab ? 'block' : 'none';
+    });
+    document.querySelectorAll('.out-tab').forEach((b, i) => {
+      b.classList.remove('on');
+    });
+    const tabs = document.querySelectorAll('.out-tab');
+    const map = { seo: 0, post: 1, html: 2, tags: 3 };
+    if (tabs[map[tab]]) tabs[map[tab]].classList.add('on');
+  }
+
+  // ── 생성 ─────────────────────────────────────────────
+  async function generate() {
+    hideErr();
+    if (location.protocol === 'file:') {
+      document.getElementById('corsBox').style.display = 'block';
+      showErr('file://로 열면 API가 차단됩니다.\npython -m http.server 8080 실행 후 http://localhost:8080/naver-to-tistory.html 접속해주세요.');
+      return;
+    }
+
+    const apiKey = document.getElementById('apiKey').value.trim() || savedKey;
+    const rawContent = inputMode === 'text'
+      ? document.getElementById('naverText').value.trim()
+      : uploadedText.trim();
+    const instructions = document.getElementById('instructions').value.trim();
+    const keyword = document.getElementById('keyword').value.trim();
+    const siteName = document.getElementById('siteName').value.trim();
+    const style = document.getElementById('style').value;
+
+    if (!apiKey)     { showErr('Gemini API Key를 먼저 입력해 주세요.'); return; }
+    if (!rawContent) { showErr('네이버 블로그 내용을 입력하거나 파일을 업로드해 주세요.'); return; }
+
+    setLoading(true);
+    setProgress(10, '네이버 원문 분석 중...');
+    document.getElementById('results').style.display = 'none';
+
+    const prompt = `당신은 구글 SEO 전문가이자 티스토리 블로그 최적화 전문가입니다.
+아래 네이버 블로그 원본 글을 티스토리(구글 SEO) 최적화 포스팅으로 완전히 재작성해주세요.
+
+【원본 네이버 블로그 내용】
+${rawContent.slice(0, 6000)}
+
+【설정】
+- 블로그/사이트: ${siteName || '(미입력)'}
+- 주요 키워드: ${keyword || '(원문에서 자동 추출)'}
+- 글 스타일: ${style}
+${instructions ? '- 추가 지시사항: ' + instructions : ''}
+
+---
+반드시 아래 태그 형식으로 정확히 출력하세요:
+
+[SEO_TITLE_START]
+(구글 검색 최적화 제목 — 주요 키워드 포함, 50~60자, 클릭 유도)
+[SEO_TITLE_END]
+
+[META_DESC_START]
+(메타 디스크립션 — 핵심 내용 요약, 검색 결과 노출용, 140~160자)
+[META_DESC_END]
+
+[SEO_KEYWORDS_START]
+키워드1, 키워드2, 키워드3, ... (원문 기반 SEO 키워드 10~15개, 쉼표 구분)
+[SEO_KEYWORDS_END]
+
+[POST_CONTENT_START]
+# (H1 제목 — SEO 최적화)
+
+## (도입부 소제목)
+(도입 문단 — 독자 관심 유도, 키워드 자연스럽게 포함)
+
+## (핵심 내용 소제목 1)
+(내용)
+
+## (핵심 내용 소제목 2)
+(내용)
+
+## (핵심 내용 소제목 3)
+(내용 — 필요시)
+
+## 마무리
+(글 요약 + 행동 유도 문구)
+[POST_CONTENT_END]
+
+[HTML_START]
+(위 본문을 티스토리 HTML 편집기에 바로 붙여넣을 수 있는 HTML 코드.
+<h2>, <h3>, <p>, <strong>, <ul>, <li> 태그 활용. 인라인 스타일 최소화)
+[HTML_END]
+
+[TAGS_START]
+태그1, 태그2, 태그3, ... (티스토리 태그용 20~30개, 쉼표 구분)
+[TAGS_END]
+
+[SEO_TIPS_START]
+(이 글의 SEO 점수와 개선 포인트 3~5가지. 예: "✅ 키워드 자연 배치 우수", "⚠️ 이미지 alt 텍스트 추가 권장" 등)
+[SEO_TIPS_START]
+
+【티스토리 SEO 작성 원칙】
+1. 제목에 주요 키워드를 앞쪽에 배치
+2. H2/H3 소제목마다 관련 키워드 자연스럽게 포함
+3. 첫 문단에 핵심 키워드 반드시 등장
+4. 네이버 특유의 이모지 남발·구어체 제거, 구글 SEO에 맞게 정제
+5. 가독성: 짧은 문단, 소제목으로 구조화
+6. 글 분량: 원문보다 충실하게 (최소 1500자 이상)`;
+
+    try {
+      setProgress(40, 'AI가 SEO 최적화 글을 작성하고 있습니다...');
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 8192, temperature: 0.65 }
+        })
+      });
+      setProgress(85, '결과 정리 중...');
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `API 오류 (${res.status})`); }
+      const data = await res.json();
+      const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!aiText) throw new Error('응답이 비어 있습니다. API Key를 확인해 주세요.');
+      setProgress(100, '변환 완료!');
+      renderResult(aiText);
+    } catch(err) {
+      let m = err.message;
+      if (m.includes('fetch') || m === 'Failed to fetch') m = '❌ API 호출 실패\n해결: python -m http.server 8080 → http://localhost:8080/naver-to-tistory.html';
+      showErr(m); setLoading(false); hideProgress();
+    }
+  }
+
+  // ── 결과 렌더링 ──────────────────────────────────────
+  function renderResult(text) {
+    const get = tag => {
+      const m = text.match(new RegExp(`\\[${tag}_START\\]([\\s\\S]*?)\\[${tag}(?:_END|_START)\\]`, 'i'));
+      return m ? m[1].trim() : '';
+    };
+
+    const seoTitle    = get('SEO_TITLE');
+    const metaDesc    = get('META_DESC');
+    const keywordsRaw = get('SEO_KEYWORDS');
+    const postContent = get('POST_CONTENT');
+    const htmlRaw     = get('HTML');
+    const tagsRaw     = get('TAGS');
+    const seoTips     = get('SEO_TIPS');
+
+    // SEO 제목
+    setBoxText('seoTitle', seoTitle);
+    // 메타 디스크립션
+    setBoxText('metaDesc', metaDesc);
+    // SEO 개선 포인트
+    setBoxText('seoTips', seoTips);
+
+    // 키워드 태그
+    const kw = document.getElementById('keywordTags');
+    kw.innerHTML = '';
+    keywordsRaw.split(',').map(k => k.trim()).filter(Boolean).forEach(k => {
+      const s = document.createElement('span');
+      s.className = 'tag'; s.textContent = k;
+      s.onclick = () => { navigator.clipboard.writeText(k); s.style.background = '#ECFDF5'; setTimeout(() => s.style.background = '', 1000); };
+      kw.appendChild(s);
+    });
+
+    // SEO 점수 (간단히 판단)
+    const score = document.getElementById('seoScore');
+    const tipCount = (seoTips.match(/✅/g) || []).length;
+    const warnCount = (seoTips.match(/⚠️|❌/g) || []).length;
+    if (tipCount >= 3 && warnCount <= 1) { score.className = 'seo-score good'; score.textContent = `📈 SEO 최적화 우수 (✅ ${tipCount}개 항목 통과)`; }
+    else if (warnCount >= 3)             { score.className = 'seo-score bad';  score.textContent = `📉 SEO 개선 필요 (⚠️ ${warnCount}개 항목 확인)`; }
+    else                                 { score.className = 'seo-score ok';   score.textContent = `📊 SEO 보통 — 위 개선 포인트 참고`; }
+
+    // 본문
+    setBoxText('postContent', postContent);
+
+    // HTML
+    const htmlClean = htmlRaw.replace(/```html\n?/g,'').replace(/```\n?/g,'');
+    setBoxText('htmlContent', htmlClean);
+
+    // 태그
+    allTagsRaw = tagsRaw;
+    const tl = document.getElementById('tagsList');
+    tl.innerHTML = '';
+    tagsRaw.split(',').map(t => t.trim()).filter(Boolean).forEach(t => {
+      const s = document.createElement('span');
+      s.className = 'tag'; s.textContent = t;
+      s.onclick = () => { navigator.clipboard.writeText(t); s.style.background='#ECFDF5'; setTimeout(()=>s.style.background='',1000); };
+      tl.appendChild(s);
+    });
+
+    setLoading(false); hideProgress();
+    document.getElementById('results').style.display = 'block';
+    switchOut('seo');
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function setBoxText(id, text) {
+    const el = document.getElementById(id);
+    const btn = el.querySelector('.copy-btn');
+    // 텍스트 노드만 교체
+    el.childNodes.forEach(n => { if (n.nodeType === 3) el.removeChild(n); });
+    const span = document.createElement('span');
+    span.textContent = text;
+    el.appendChild(span);
+  }
+
+  // ── 유틸 ─────────────────────────────────────────────
+  function cpBox(id, btn) {
+    const el = document.getElementById(id);
+    const span = el.querySelector('span');
+    navigator.clipboard.writeText(span ? span.textContent : el.innerText).then(() => {
+      btn.textContent = '✓ 복사됨'; btn.classList.add('done');
+      setTimeout(() => { btn.textContent = '복사'; btn.classList.remove('done'); }, 1800);
+    });
+  }
+  function cpAllTags() {
+    navigator.clipboard.writeText(allTagsRaw).then(() => alert('전체 태그가 복사되었습니다!'));
+  }
+  function setLoading(on) {
+    document.getElementById('genBtn').disabled = on;
+    document.getElementById('spinner').style.display = on ? 'block' : 'none';
+    document.getElementById('genText').textContent = on ? 'SEO 최적화 중...' : '🚀 티스토리 SEO 글 변환하기';
+  }
+  function setProgress(pct, msg) {
+    document.getElementById('progWrap').style.display = 'block';
+    document.getElementById('progMsg').style.display = 'block';
+    document.getElementById('progBar').style.width = pct + '%';
+    document.getElementById('progMsg').textContent = msg;
+  }
+  function hideProgress() { setTimeout(() => { document.getElementById('progWrap').style.display='none'; document.getElementById('progMsg').style.display='none'; }, 700); }
+  function showErr(m)  { const e = document.getElementById('alertBox'); e.textContent = m; e.className = 'alert err'; }
+  function hideErr()   { document.getElementById('alertBox').className = 'alert'; }
+</script>
+</body>
+</html>
